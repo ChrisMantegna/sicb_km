@@ -104,5 +104,3 @@ head(pivoted_data)
 write.csv(pivoted_data, "/Users/cmantegna/Documents/GitHub/sicb_km/data/pivoted_data.csv", row.names = FALSE)
 
 ```
-
-
