@@ -1,0 +1,106 @@
+
+---
+title: "EDA - Yellow 2023"
+output: html_document
+---
+
+# General Packages
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(vegan)
+library(ggplot2)
+```
+
+# Load Data
+```{r}
+#data<- read.csv("/Users/cmantegna/Documents/GitHub/sicb_km/data/organisms_2023.csv")
+data<- read.csv("/Users/cmantegna/Documents/GitHub/sicb_km/data/complete_data.csv")
+```
+
+# Check it out
+```{r}
+# does it look like it imported correctly? Check your row v column count in the environment window below: X observations (rows) of Y variables (columns).
+head(data)
+
+# take a look at your columns, their format, and look for any missing values (NAs), or overall inconsistencies in the data set before doing a deeper dive.
+summary(data)
+
+```
+
+# Clean it up
+## The current state of it isn't going to work, so we have to do some transformations:
+1. Check for empty cells
+2. Replace empties with the correct or imputed values
+3. Consolidate rows so that there's a cumulative value for each zone in each section (only 3 rows per section)
+3. Change the table format so that each section is formatted as a character
+4. Change the table orientation so that the rows and columns are swapped; sections as columns and organisms as rows
+
+```{r}
+
+# check for empties
+empty_cells <- sum(is.na(data) | data == "")
+cat("Number of empty cells:", empty_cells, "\n")
+
+#identify empties. this step is if you have really complicated data and have to manually check each one - we just need to replace empties with 0's.
+rows_with_empty <- which(rowSums(is.na(data) | data == "") > 0)
+cols_with_empty <- which(colSums(is.na(data) | data == "") > 0)
+
+# replace empties with 0 & then rerun the empty cell step above to double check they were all replaced
+data[is.na(data) | data == ""] <- 0
+
+#overwrite your data file so we don't have to do this again and write it out as a safety stop.
+data <- data
+write_csv(data, "/Users/cmantegna/Documents/GitHub/sicb_km/data/complete_data.csv")
+
+```
+
+# Consolidate counts
+
+```{r}
+
+# make sections characters & check they really are characters
+data$SECTION <- as.character(data$SECTION)
+str(data)
+
+# we're using dplyr
+library(dplyr)
+
+# Summarize data to a single cumulative value for each section and zone, check it worked and write it out for your second safety stop.
+data <- data %>%
+  group_by(SECTION, ZONE) %>%
+  summarise(across(where(is.numeric), sum, na.rm = TRUE), .groups = "drop")
+
+head(data)
+
+write_csv(data, "/Users/cmantegna/Documents/GitHub/sicb_km/data/cleaned_data.csv")
+
+```
+
+# Transform data set
+```{r}
+
+# Load necessary libraries
+library(readxl)
+library(tidyr)
+library(dplyr)
+
+# Pivot 
+pivoted_data <- data %>%
+  pivot_longer(
+    cols = -c(SECTION, ZONE),       # Columns to keep fixed
+    names_to = "Organism",          # Name for the new variable column
+    values_to = "Count"             # Name for the new value column
+  ) %>%
+  pivot_wider(
+    names_from = SECTION,           # Make sections into columns
+    values_from = Count             # Values to fill in the new columns
+  )
+
+# check your work
+head(pivoted_data)
+
+# write out your data as another safety stop
+write.csv(pivoted_data, "/Users/cmantegna/Documents/GitHub/sicb_km/data/pivoted_data.csv", row.names = FALSE)
+
+```
