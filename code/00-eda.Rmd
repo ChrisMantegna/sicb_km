@@ -1,0 +1,97 @@
+
+---
+title: "Ecological Data Analysis Workflow"
+author: "Your Name"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(vegan)
+library(ggplot2)
+```
+
+## Data Preprocessing
+
+```{r data-preprocessing}
+# Load data (replace with your file path)
+data <- read.csv("your_data.csv")
+
+# Check the structure of the data
+str(data)
+
+# Ensure numeric columns are scaled
+numeric_cols <- sapply(data[, -1], is.numeric) # Assuming the first column is categorical
+data[, numeric_cols] <- scale(data[, numeric_cols])
+
+# Display summary of the scaled data
+summary(data)
+```
+
+## Summarizing Community Composition
+
+```{r summarization}
+# Summarize counts by zone
+zone_summary <- data %>%
+  group_by(ZONATION) %>%
+  summarise(across(where(is.numeric), sum, na.rm = TRUE))
+
+# Calculate alpha diversity indices
+diversity_metrics <- zone_summary %>%
+  mutate(
+    richness = rowSums(select(., -ZONATION) > 0),
+    shannon = diversity(select(., -ZONATION), index = "shannon"),
+    simpson = diversity(select(., -ZONATION), index = "simpson")
+  )
+
+print(diversity_metrics)
+```
+
+## Beta Diversity and Section Comparisons
+
+```{r beta-diversity}
+# Compute Bray-Curtis dissimilarity
+bray_dist <- vegdist(select(data, -ZONATION), method = "bray")
+
+# Perform NMDS
+nmds <- metaMDS(bray_dist, k = 2)
+
+# Plot NMDS
+plot(nmds, type = "t", main = "NMDS of Community Composition")
+```
+
+## Zonal Trends
+
+```{r zonal-trends}
+# Example: Analyze trends across zones for a selected species
+ggplot(data, aes(x = ZONATION, y = `SPECIES_COLUMN`, fill = ZONATION)) +
+  geom_boxplot() +
+  labs(title = "Species Abundance Across Zones",
+       x = "Zonation",
+       y = "Abundance") +
+  theme_minimal()
+```
+
+## Visualization Options
+
+```{r visualizations}
+# Stacked bar plot for community composition
+zone_long <- zone_summary %>%
+  pivot_longer(cols = -ZONATION, names_to = "Species", values_to = "Count")
+
+ggplot(zone_long, aes(x = ZONATION, y = Count, fill = Species)) +
+  geom_bar(stat = "identity") +
+  labs(title = "Community Composition by Zone",
+       x = "Zonation",
+       y = "Total Count") +
+  theme_minimal()
+
+# Heatmap of abundances
+library(pheatmap)
+pheatmap(as.matrix(select(zone_summary, -ZONATION)),
+         cluster_rows = TRUE, cluster_cols = TRUE,
+         main = "Heatmap of Species Abundances")
+```
+
