@@ -1,11 +1,10 @@
 
 ---
-title: "Ecological Data Analysis Workflow"
-author: "Your Name"
-date: "`r Sys.Date()`"
+title: "EDA - Yellow 2023"
 output: html_document
 ---
 
+# General Packages
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
@@ -13,21 +12,41 @@ library(vegan)
 library(ggplot2)
 ```
 
-## Data Preprocessing
+# Load Data
+```{r}
+data<- read.csv("/Users/cmantegna/Documents/GitHub/sicb_km/data/organisms_2023.csv")
+```
 
-```{r data-preprocessing}
-# Load data (replace with your file path)
-data <- read.csv("your_data.csv")
+# Check it out
+```{r}
+# does it look like it imported correctly? Check your row v column count in the environment window below: X observations (rows) of Y variables (columns).
+head(data)
 
-# Check the structure of the data
-str(data)
-
-# Ensure numeric columns are scaled
-numeric_cols <- sapply(data[, -1], is.numeric) # Assuming the first column is categorical
-data[, numeric_cols] <- scale(data[, numeric_cols])
-
-# Display summary of the scaled data
+# take a look at your columns, their format, and look for any missing values (NAs), or overall inconsistencies in the data set before doing a deeper dive.
 summary(data)
+
+```
+
+# Clean it up
+## The current state of it isn't going to work, so we have to do some transformations:
+1. Check for empty cells
+2. Replace empties with the correct or imputed values
+3. Consolidate rows so that there's a cumulative value for each zone in each section (only 3 rows per section)
+3. Change the table format so that each section is formatted as a character
+4. Change the table orientation so that the rows and columns are swapped; sections as columns and organisms as rows
+
+```{r}
+
+# check for empties
+empty_cells <- sum(is.na(data) | data == "")
+cat("Number of empty cells:", empty_cells, "\n")
+
+#identify empties. this step is if you have really complicated data and have to manually check each one - we just need to replace empties with 0's.
+rows_with_empty <- which(rowSums(is.na(data) | data == "") > 0)
+cols_with_empty <- which(colSums(is.na(data) | data == "") > 0)
+
+# replace empties with 0 & then rerun the empty cell step above to double check they were all replaced
+data[is.na(data) | data == ""] <- 0
 ```
 
 ## Summarizing Community Composition
