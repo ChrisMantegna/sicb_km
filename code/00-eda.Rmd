@@ -7,9 +7,11 @@ output: html_document
 # General Packages
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
+
 library(tidyverse)
 library(vegan)
 library(ggplot2)
+
 ```
 
 # Load Data
