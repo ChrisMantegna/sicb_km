@@ -104,7 +104,9 @@ pheatmap(as.matrix(select(pivoted_data, -organism)),
 
 ```
 
-## simpson index for dominance
+## simpson index for dominance (by section and zone)
+### Interpretation: Simpson values are between 0-1; 1 means only one species is dominanting the environment and 0 means there's unlimited diversity. Lower numbers indicate higher diversity.
+### Interpretation: Species richeness is just the unique number of species identified in each.
 ```{r}
 
 # create community matrix
@@ -117,26 +119,95 @@ community_matrix <- pivoted_data %>%
 community_matrix <- community_matrix %>%
   rownames_to_column(var = "site") 
 
-# View the updated table
+#write.csv(community_matrix, "/Users/cmantegna/Documents/GitHub/sicb_km/output/tables/community_matrix.csv", row.names = FALSE)
+
+# Simpson Index
+simpson_index <- function(row) {
+  total <- sum(row)
+  if (total == 0) return(0) # Avoid division by zero
+  proportions <- row / total
+  return(sum(proportions^2))
+}
+
+# Species Richness
+species_richness <- function(row) {
+  return(sum(row > 0))
+}
+
+# create summary table of simpson and richness
+summary_table <- community_matrix %>%
+  rowwise() %>%
+  mutate(
+    Simpson_Index = simpson_index(c_across(-site)),
+    Species_Richness = species_richness(c_across(-site))
+  ) %>%
+  select(site, Simpson_Index, Species_Richness) 
+
+# check it and write out to file
 print(summary_table)
 
-write.csv(community_matrix, "/Users/cmantegna/Documents/GitHub/sicb_km/output/tables/community_matrix.csv", row.names = FALSE)
+write.csv(summary_table, "/Users/cmantegna/Documents/GitHub/sicb_km/output/tables/simpson_summary.csv", row.names = FALSE)
 
-# Calculate Simpson Index
-simpson_indices <- apply(community_matrix, 2, function(x) diversity(x, index = "simpson"))
+```
 
-# Add richness
-species_richness <- colSums(community_matrix > 0)
+## simpson index for dominance (separately by section and zone)
+### create an adjusted df
+```{r}
 
-# Create summary table
-diversity_summary <- data.frame(
-  Site = colnames(community_matrix),
-  Simpson = simpson_indices,
-  Richness = species_richness
-)
-print(diversity_summary)
+library(stringr)
+
+# add columns for section and zone using regex
+community_matrix_sep <- community_matrix %>%
+  mutate(
+    Section = str_extract(site, "\\d+"),  # Extract the numeric part
+    Zone = str_extract(site, "[A-Z]$")   # Extract the last uppercase letter
+  )
+
+```
+
+## simpson index for dominance by zone
+```{r}
+
+library(dplyr)
+library(stringr)
 
 
+# simpson and richness
+community_matrix_sep <- community_matrix_sep %>%
+  rowwise() %>%
+  mutate(
+    Simpson_Index = sum((c_across(-c(site, Section, Zone)) / sum(c_across(-c(site, Section, Zone))))^2, na.rm = TRUE),
+    Species_Richness = sum(c_across(-c(site, Section, Zone)) > 0, na.rm = TRUE)
+  ) %>%
+  ungroup()
+
+# calculate by zone
+summary_by_zone <- community_matrix_sep %>%
+  group_by(Zone) %>%
+  summarise(
+    Mean_Simpson = mean(Simpson_Index, na.rm = TRUE),
+    Mean_Richness = mean(Species_Richness, na.rm = TRUE)
+  )
+
+# View the results
+print(summary_by_zone)
+
+
+```
+
+## simpson index for dominance by section
+```{r}
+
+# Group by Section and calculate metrics
+summary_by_section <- community_matrix_sep %>%
+  group_by(Section) %>%
+  summarise(
+    Mean_Simpson = mean(Simpson_Index, na.rm = TRUE),
+    Mean_Richness = mean(Species_Richness, na.rm = TRUE)
+  )
+
+# View the results
+print(summary_by_section)
 
 ```
 
@@ -157,9 +228,115 @@ plot(nmds, type = "t", main = "NMDS of Community Composition")
 
 ```
 
-# stress plot - i will need to dig in further to understand why we have a distinct stair-step pattern
+# #stress plot - i will need to dig in further to understand why we have a distinct stair-step pattern
 ```{r}
 
 stressplot(nmds)
 
 ```
+
+## simpson and richness based on groups
+### Interpretation: neither substrate nor water movement solely impact community diversity or species richness.
+```{r}
+
+# We want to look at the difference substrate and water movement direction play on diversity and richness, so we'll create 3 groups (section 1-3, 4-5, and 6-8). Since sections 1-3 and 6-8 share the same substrate, but differ in ordinal orientation, we'll separate them into two groups.
+
+# create custom groups
+community_matrix_groups <- community_matrix_sep %>%
+  mutate(
+    Section_Group = case_when(
+      as.numeric(Section) %in% 1:3 ~ "1-3",
+      as.numeric(Section) %in% 4:5 ~ "4-5",
+      as.numeric(Section) %in% 6:8 ~ "6-8",
+      TRUE ~ "Other" # Catch any unexpected values
+    )
+  )
+
+# Group by the new Section_Group and calculate metrics
+summary_by_section_group <- community_matrix_groups %>%
+  group_by(Section_Group) %>%
+  summarise(
+    Mean_Simpson = mean(Simpson_Index, na.rm = TRUE),
+    Mean_Richness = mean(Species_Richness, na.rm = TRUE)
+  )
+
+# View the results
+print(summary_by_section_group)
+
+```
+
+## permanova setup
+```{r}
+
+# set it up
+community_data <- community_matrix_groups %>% select(-site, -Zone, -Section, -Simpson_Index, -Species_Richness, -Section_Group) # only species columns
+metadata <- community_matrix_groups %>% select(site, Zone, Section, Section_Group) # Grouping variables
+
+# calculate dissimilarity
+bray_curtis <- vegdist(community_data, method = "bray")
+
+```
+
+## permanova - validate
+### Interpretation: Zone explains a statistically significant amount of variation in the community composition where neither section nor section group do.
+```{r}
+
+# zone
+# result: p= 0.001 ***
+# result: explains about 32% of the differences
+permanova_zone <- adonis2(bray_curtis ~ Zone, data = metadata, permutations = 999)
+print(permanova_zone)
+
+# section
+# result: no significant differences
+permanova_section <- adonis2(bray_curtis ~ Section, data = metadata, permutations = 999)
+print(permanova_section)
+
+# section
+# result: no significant differences
+permanova_section_group <- adonis2(bray_curtis ~ Section_Group, data = metadata, permutations = 999)
+print(permanova_section_group)
+
+```
+
+## permanova with interactions - validate
+### Interactions
+```{r}
+
+# zone + section
+# result: no significant difference
+permanova_zs <- adonis2(bray_curtis ~ Zone * Section, data = metadata, permutations = 999)
+print(permanova_zs)
+
+# zone + section group
+# result: p= 0.001 ***
+# result: explains about 53% of the differences
+permanova_zsg <- adonis2(bray_curtis ~ Zone * Section_Group, data = metadata, permutations = 999)
+print(permanova_zsg)
+
+```
+
+plot nmds of interaction
+```{r}
+
+plot(nmds, type = "t")
+ordihull(nmds, groups = interaction(metadata$Zone, metadata$Section_Group), draw = "polygon", col = "blue", label = TRUE)
+
+```
+
+## new glm
+```{r}
+
+library(mgcv)
+
+# Generalized Additive Model (GAM)
+gam_model <- gam(Count ~ s(Temperature) + s(Depth), data = long_data, family = poisson)
+summary(gam_model)
+
+```
+
+
+
+
+
+
