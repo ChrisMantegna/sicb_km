@@ -57,61 +57,186 @@ data[is.na(data) | data == ""] <- 0
 
 ```
 
-## convert all column names to lowercase + consolidate rows so that there's a cumulative value for each zone in each section (only 3 rows per section)
+## convert all column names to lowercase + make sure sections are characters instead of numbers
 ```{r}
 
 # fix column names
 colnames(data) <- tolower(colnames(data))
 
+# make sections characters & check they really are characters
+data$section <- as.character(data$section)
+str(data)
+
 ```
 
 
 ## consolidate counts
-
 ```{r}
 
-# make sections characters & check they really are characters
-data$SECTION <- as.character(data$SECTION)
-str(data)
-
-# we're using dplyr
 library(dplyr)
 
 # Summarize data to a single cumulative value for each section and zone, check it worked and write it out for your second safety stop.
 data <- data %>%
-  group_by(SECTION, ZONE) %>%
+  group_by(section, zone) %>%
   summarise(across(where(is.numeric), sum, na.rm = TRUE), .groups = "drop")
 
 head(data)
 
-write_csv(data, "/Users/cmantegna/Documents/GitHub/sicb_km/data/cleaned_data.csv")
+#write_csv(data, "/Users/cmantegna/Documents/GitHub/sicb_km/output/data_adjusted/cleaned_data.csv")
 
 ```
 
-# Transform data set
+## transform data set
 ```{r}
 
-# Load necessary libraries
-library(readxl)
-library(tidyr)
-library(dplyr)
+# current df format won't allow analysis, so we have to pivot the table and save it for further work
+#library(tidyr)
 
-# Pivot 
+# combine section and zone
+data <- data %>%
+  mutate(section_zone = paste0(section, zone))
+
+# pivot
 pivoted_data <- data %>%
+  select(-section, -zone) %>%  # Exclude section and zone as they're now combined
   pivot_longer(
-    cols = -c(SECTION, ZONE),       # Columns to keep fixed
-    names_to = "Organism",          # Name for the new variable column
-    values_to = "Count"             # Name for the new value column
+    cols = -section_zone,       # Exclude section_zone from the columns to be pivoted
+    names_to = "organism", 
+    values_to = "count"
   ) %>%
   pivot_wider(
-    names_from = SECTION,           # Make sections into columns
-    values_from = Count             # Values to fill in the new columns
+    names_from = section_zone,
+    values_from =count,
+    values_fill = 0
   )
+
+# View the pivoted data
+head(pivoted_data)
+
 
 # check your work
 head(pivoted_data)
 
 # write out your data as another safety stop
-write.csv(pivoted_data, "/Users/cmantegna/Documents/GitHub/sicb_km/data/pivoted_data.csv", row.names = FALSE)
+write.csv(pivoted_data, "/Users/cmantegna/Documents/GitHub/sicb_km/output/data_adjusted/pivoted_data.csv", row.names = FALSE)
+
+```
+
+# EDA
+## summary stats
+```{r}
+
+# check out mean, min, max and standard deviation of counts for each
+
+library(dplyr)
+
+summary_stats_by_zone <- pivoted_data %>%
+  pivot_longer(
+    cols = -organism, # Pivot section-zone columns
+    names_to = "site",
+    values_to = "count"
+  ) %>%
+  mutate(zone = substr(site, nchar(site), nchar(site))) %>% # Extract the zone from the Site column
+  group_by(organism, zone) %>% # Group by organism and zone
+  summarise(
+    mean = mean(count, na.rm = TRUE),
+    sd = sd(count, na.rm = TRUE),
+    min = min(count, na.rm = TRUE),
+    max = max(count, na.rm = TRUE),
+    sum = sum(count, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# check it out
+print(summary_stats_by_zone)
+
+# write out your data to review later if you want
+write.csv(summary_stats_by_zone, "/Users/cmantegna/Documents/GitHub/sicb_km/output/tables/summary_stats.csv", row.names = FALSE)
+
+```
+
+# counts
+```{r}
+
+organism_totals <- pivoted_data %>%
+  mutate(Total = rowSums(select(., -organism))) %>%
+  arrange(desc(Total))
+
+print(organism_totals)
+
+# write out to a table
+write.csv(organism_totals, "/Users/cmantegna/Documents/GitHub/sicb_km/output/tables/organism_totals.csv", row.names = FALSE)
+
+```
+
+## most abundant & least
+## this is telling... we may have to switch strategy
+```{r}
+
+# top 5
+top_5 <- head(organism_totals, 5)
+print(top_5)
+
+# lowest 5
+bottom_15 <- tail(organism_totals, 15)
+print(bottom_15)
+
+```
+
+## histogram of distribution - not helpful
+```{r}
+
+library(ggplot2)
+
+# Create histograms for counts across zones for each organism
+ggplot(pivoted_data, aes(x = `1L`)) + # Replace `1L` with any section-zone column
+  geom_histogram(binwidth = 5, fill = "blue", color = "black") +
+  labs(title = "Distribution of Counts in Section 1L", x = "counts", y = "Frequency") +
+  theme_minimal()
+
+```
+
+## different histogram
+```{r}
+
+library(ggplot2)
+library(dplyr)
+
+# pivot
+long_data <- pivoted_data %>%
+  pivot_longer(
+    cols = -organism,
+    names_to = "site",
+    values_to = "count"
+  ) %>%
+  mutate(
+    section = substr(site, 1, nchar(site) - 1), # Extract the section
+    zone = substr(site, nchar(site), nchar(site)) # Extract the zone
+  )
+
+# plot
+ggplot(long_data, aes(x = count, fill = zone)) +
+  geom_histogram(binwidth = 5, position = "dodge", alpha = 0.7) +
+  facet_wrap(~organism, scales = "free_y") +
+  labs(
+    title = "Distribution of Counts by Organism and Zone",
+    x = "count",
+    y = "Frequency",
+    fill = "zone"
+  ) +
+  theme_minimal()
+
+# write out new data structure; you'll need it for analysis
+write.csv(long_data, "/Users/cmantegna/Documents/GitHub/sicb_km/output/data_adjusted/long_datas.csv", row.names = FALSE)
+```
+
+## bar plots
+### we can see that 27 specific species were identified in the individual counts (no algae or 'binned' species like barnacles) are included in this count. We can cut our analysis down from this point to only what was found.
+```{r}
+
+library(ggplot2)
+ggplot(pivoted_data, aes(x = organism, y = `1L`)) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
 
 ```

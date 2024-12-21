@@ -1,0 +1,141 @@
+---
+title: "Analysis - Yellow 2023"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load libraries
+```{r}
+
+library(dplyr)
+library(tidyverse)
+library(vegan)
+library(ggplot2)
+library(reader)
+
+```
+
+# Load Data
+```{r}
+
+# figure out where you are on your computer
+getwd()
+
+# Note you'll need to change the file path to match where it is on your computer
+data<- read.csv("/Users/cmantegna/Documents/GitHub/sicb_km/output/data_adjusted/cleaned_data.csv")
+pivoted_data<- read.csv("/Users/cmantegna/Documents/GitHub/sicb_km/output/data_adjusted/pivoted_data.csv")
+```
+
+# Community composition analysis
+## shanon diversity index
+### these results follow what we would expect.
+```{r}
+
+# Shannon Diversity Index. This measures the richness (# of different species present) and evenness of species distribution. Higher numbers indicate greater diversity and even distribution, lower numbers indicate lower diversity d/y a few species dominating the landscape.
+library(tibble)
+
+# SDI calculation
+diversity_indices <- apply(select(pivoted_data, -organism), 2, function(x) diversity(x, index = "shannon"))
+
+# convert to df for ease of viewing
+diversity_table <- tibble(
+  site = names(diversity_indices),
+  Shannon_Index = diversity_indices
+)
+
+# check it out + write it out
+print(diversity_table)
+
+write.csv(diversity_table, "/Users/cmantegna/Documents/GitHub/sicb_km/output/tables/sdi.csv", row.names = FALSE)
+
+```
+
+## SDI heatmap - not helpful at all
+```{r}
+
+library(ggplot2)
+
+# Add zones for labeling
+diversity_table <- diversity_table %>%
+  mutate(zone = substr(site, nchar(site), nchar(site)))
+
+# Plot heatmap
+ggplot(diversity_table, aes(x = zone, y = site, fill = Shannon_Index)) +
+  geom_tile(color = "white") +
+  scale_fill_gradient(low = "blue", high = "red") +
+  labs(
+    title = "Shannon Diversity Index Heatmap",
+    x = "Zone",
+    y = "Site",
+    fill = "Diversity Index"
+  ) +
+  theme_minimal()
+
+```
+
+## SDI barplot - this confirms what should have happened; viz not useful
+```{r}
+
+ggplot(diversity_table, aes(x = zone, y = Shannon_Index, fill = zone)) +
+  geom_bar(stat = "identity") +
+  labs(
+    title = "Shannon Diversity Index by Zone",
+    x = "Zone",
+    y = "Diversity Index"
+  ) +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set3")
+
+```
+
+## general heatmap - terrible
+```{r}
+
+#install.packages('pheatmap')
+library(pheatmap)
+
+# Create heatmap
+pheatmap(as.matrix(select(pivoted_data, -organism)),
+         cluster_rows = TRUE, cluster_cols = TRUE,
+         main = "Heatmap of Organism Counts Across Zones",
+         color = colorRampPalette(c("white", "blue"))(50))
+
+```
+
+## simpson index for dominance
+```{r}
+
+# Convert species-as-rows into a community matrix
+community_matrix <- pivoted_data %>%
+  column_to_rownames("organism") %>% # Set Organism as row names
+  t() %>% # Transpose to make species columns
+  as.data.frame()
+
+
+```
+
+## nmds
+### Interpretation - zonation cluster and section clustering tells who is most similar in composition. None of the clustering follows what we would expect from a substrate pov.
+```{r}
+
+library(vegan)
+
+# Calculate Bray-Curtis Dissimilarity
+bray_curtis <- vegdist(community_matrix, method = "bray")
+
+# Perform NMDS
+nmds <- metaMDS(bray_curtis)
+
+# Plot NMDS Results
+plot(nmds, type = "t", main = "NMDS of Community Composition")
+
+```
+
+# stress plot - i will need to dig in further to understand why we have a distinct stair-step pattern
+```{r}
+
+stressplot(nmds)
+
+```
