@@ -107,11 +107,35 @@ pheatmap(as.matrix(select(pivoted_data, -organism)),
 ## simpson index for dominance
 ```{r}
 
-# Convert species-as-rows into a community matrix
+# create community matrix
 community_matrix <- pivoted_data %>%
   column_to_rownames("organism") %>% # Set Organism as row names
   t() %>% # Transpose to make species columns
   as.data.frame()
+
+# fix df so the sites are part of the df
+community_matrix <- community_matrix %>%
+  rownames_to_column(var = "site") 
+
+# View the updated table
+print(summary_table)
+
+write.csv(community_matrix, "/Users/cmantegna/Documents/GitHub/sicb_km/output/tables/community_matrix.csv", row.names = FALSE)
+
+# Calculate Simpson Index
+simpson_indices <- apply(community_matrix, 2, function(x) diversity(x, index = "simpson"))
+
+# Add richness
+species_richness <- colSums(community_matrix > 0)
+
+# Create summary table
+diversity_summary <- data.frame(
+  Site = colnames(community_matrix),
+  Simpson = simpson_indices,
+  Richness = species_richness
+)
+print(diversity_summary)
+
 
 
 ```
