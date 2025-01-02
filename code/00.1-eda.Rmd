@@ -197,7 +197,7 @@ algaeColor_ordered<- ggplot(algae_long, aes(x = factor(section), y = Presence, f
 
 print(algaeColor_ordered)
 
-ggsave(filename= "/Users/cmantegna/Documents/GitHub/sicb_km/output/figures/algaeColor_ordered.png", plot=algaeColor_ordered, width = 12, height = 10, dpi = 300)
+#ggsave(filename= "/Users/cmantegna/Documents/GitHub/sicb_km/output/figures/algaeColor_ordered.png", plot=algaeColor_ordered, width = 12, height = 10, dpi = 300)
 
 ```
 
