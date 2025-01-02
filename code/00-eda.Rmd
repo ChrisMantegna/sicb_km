@@ -1,4 +1,3 @@
-
 ---
 title: "EDA - Yellow 2023"
 ---
@@ -69,7 +68,6 @@ str(data)
 
 ```
 
-
 ## consolidate counts
 ```{r}
 
@@ -118,7 +116,7 @@ head(pivoted_data)
 head(pivoted_data)
 
 # write out your data as another safety stop
-write.csv(pivoted_data, "/Users/cmantegna/Documents/GitHub/sicb_km/output/data_adjusted/pivoted_data.csv", row.names = FALSE)
+#write.csv(pivoted_data, "/Users/cmantegna/Documents/GitHub/sicb_km/output/data_adjusted/pivoted_data.csv", row.names = FALSE)
 
 ```
 

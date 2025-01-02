@@ -1,0 +1,284 @@
+---
+title: "00.1: Algal EDA"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load libraries
+```{r}
+
+library(dplyr)
+library(tidyverse)
+library(vegan)
+library(ggplot2)
+library(reader)
+
+```
+
+# Load Data
+```{r}
+
+# figure out where you are on your computer
+getwd()
+
+# Note you'll need to change the file path to match where it is on your computer
+data<- read.csv("/Users/cmantegna/Documents/GitHub/sicb_km/data/algae.csv")
+#data2<- read.csv("/Users/cmantegna/Documents/GitHub/sicb_km/output/data_adjusted/pivoted_data.csv")
+
+```
+
+# Clean it up
+## convert presence/ absence to numerical values we can use
+```{r}
+
+# replace 'P' with 1 and 'A' with 0
+data[, 3:ncol(data)] <- lapply(data[, 3:ncol(data)], function(x) ifelse(x == "P", 1, 0))
+
+head(data)
+
+```
+
+## check for empties and ensure section is a character/ factor
+```{r}
+
+# fix column names
+colnames(data) <- tolower(colnames(data))
+
+# make sections characters & check they really are characters
+data$section <- as.character(data$section)
+str(data)
+
+# check for missing values
+colSums(is.na(data))
+
+```
+
+## transform the df
+```{r}
+
+library(dplyr)
+
+data <- data %>%
+  mutate(
+    section = trimws(section),
+    zonation = trimws(zonation)
+  )
+
+unique_combinations <- data %>%
+  distinct(section, zonation)
+
+print(unique_combinations)
+
+# summarize by section & zone
+library(dplyr)
+
+zone_section_summary <- data %>%
+  group_by(section, zonation) %>%
+  summarise(across(where(is.numeric), sum))
+
+# check it out
+print(zone_section_summary)
+
+```
+
+# Species Richness
+```{r}
+
+# add a column for species richness (sum of all algae presence per row)
+data$richness <- rowSums(data[, 3:ncol(data)])
+
+# summarize richness by section
+richness_summary <- data %>%
+  group_by(section) %>%
+  summarise(averageRichness = mean(richness))
+
+# Create a bar plot for species richness
+richness<- ggplot(richness_summary, aes(x = factor(section), y = averageRichness)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  labs(
+    title = "Species Richness by Section",
+    x = "Section",
+    y = "Average Species Richness"
+  ) +
+  theme_minimal()
+
+#ggsave(filename= "/Users/cmantegna/Documents/GitHub/sicb_km/output/figures/algal_ricness.png", plot=richness, width = 12, height = 10, dpi = 300)
+
+```
+
+# Algal presence by section
+```{r}
+
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+# summarize algal presence by section
+algal_summary <- data %>%
+  group_by(section) %>%
+  summarise(across(where(is.numeric), sum)) %>%
+  pivot_longer(cols = -c(section,richness), names_to = "Algae", values_to = "Count")
+
+# stacked bar plot
+algae<- ggplot(algal_summary, aes(x = factor(section), y = Count, fill = Algae)) +
+  geom_bar(stat = "identity") +
+  labs(
+    title = "Algal Composition by Section",
+    x = "Section",
+    y = "Count of Presence",
+    fill = "Algae Type"
+  ) +
+  theme_minimal()
+
+#ggsave(filename= "/Users/cmantegna/Documents/GitHub/sicb_km/output/figures/algae_by_section.png", plot=algae, width = 12, height = 10, dpi = 300)
+
+```
+
+# Stats
+## Normality check
+```{r}
+
+# data is not normally distributed so we have to run a PERMANOVA instead of an ANOVA
+data %>%
+  group_by(section) %>%
+  summarise(p_value = shapiro.test(richness)$p.value)
+
+
+```
+
+## PERMANOVA
+### troubleshooting code for the matrix creation: lines 170-196
+```{r}
+
+# make section a factor
+data$section <- as.factor(data$section)
+
+# pull out the algae columns
+algal_data <- data[, 3:16]
+
+# Check for missing values
+sum(is.na(algal_data))
+
+# Remove rows with missing values (if necessary)
+algal_data <- na.omit(algal_data)
+
+# Check data type of each column
+str(algal_data)
+
+# Check for missing values by column
+colSums(is.na(algal_data))
+
+# Check for missing values by row
+rowSums(is.na(algal_data))
+
+# Check if all values are numeric and non-negative
+all(algal_data >= 0, na.rm = TRUE)
+
+# Convert non-numeric columns to numeric (if needed)
+#algal_data <- data[, 3:16]
+#algal_data[] <- lapply(algal_data, as.numeric)
+
+library(vegan)
+# since this distance matrix is sensitive to rows with 0s all the way across, we are going to figure out if that exists before trying to rerun the distance matrix
+
+zero_rows <- rowSums(algal_data) == 0
+
+# Count the number of such rows
+sum(zero_rows)
+
+# If needed, inspect these rows
+#data[zero_rows, ]
+
+# Remove rows with all zeros
+algal_data <- algal_data[!zero_rows, ]
+
+# compute a distance matrix (e.g., Jaccard or Bray-Curtis)
+distance_matrix <- vegdist(algal_data, method = "bray")
+
+# Subset data to match non-zero rows in algal_data
+non_zero_indices <- rowSums(data[, 3:16]) > 0  # Adjust column range as needed
+data <- data[non_zero_indices, ]
+
+# Check for negative values or missing entries in the distance matrix
+#distance_matrix[distance_matrix < 0]  # Negative values
+#sum(is.na(distance_matrix))           # Missing values
+
+
+# Run PERMANOVA
+permanova_result <- adonis2(distance_matrix ~ section, data = data, permutations = 999)
+
+# View the results
+print(permanova_result)
+
+```
+
+## posthoc for permanova is a pairwise test
+### troubleshoot this later
+```{r}
+
+library(devtools)
+#install.packages("devtools")
+devtools::install_github("pmartinezarbizu/pairwiseAdonis")
+library(pairwiseAdonis)
+
+
+```
+
+## NMDS to visualize which section(s) is driving the significant result
+```{r}
+
+library(vegan)
+
+# Perform NMDS on the distance matrix
+nmds_result <- metaMDS(vegdist(algal_data, method = "bray"), k = 2, trymax = 100)
+
+# Plot NMDS with sections as groups
+plot(nmds_result, type = "t")
+ordihull(nmds_result, groups = data$section, draw = "polygon", col = "blue", label = TRUE)
+
+
+```
+
+## NMDS plot cleaned up a bit
+```{r}
+
+library(vegan)
+library(ggplot2)
+library(ggforce) 
+
+# Extract NMDS scores
+nmds_scores <- as.data.frame(scores(nmds_result))
+nmds_scores$section <- data$section
+
+# Calculate convex hulls for each group
+hull_data <- nmds_scores %>%
+  group_by(section) %>%
+  slice(chull(NMDS1, NMDS2))  # Calculate convex hull points
+
+# Plot the NMDS
+ggplot() +
+  # Add convex hulls for each section
+  geom_polygon(data = hull_data, aes(x = NMDS1, y = NMDS2, fill = section, group = section), alpha = 0.3) +
+  # Add points for each sample
+  geom_point(data = nmds_scores, aes(x = NMDS1, y = NMDS2, color = section), size = 3) +
+  # Label sections
+  #geom_text(data = nmds_scores, aes(x = NMDS1, y = NMDS2, label = section), size = 4, hjust = -0.2, vjust = -0.5) +
+  # Aesthetic adjustments
+  labs(
+    title = "NMDS Plot of Algal Composition by Section",
+    x = "NMDS1",
+    y = "NMDS2",
+    fill = "Section",
+    color = "Section"
+  ) +
+  theme_minimal(base_size = 14) +  # Clean theme with larger font size
+  theme(
+    legend.position = "right",
+    panel.grid = element_blank()  # Remove gridlines
+  )
+
+
+```
+
