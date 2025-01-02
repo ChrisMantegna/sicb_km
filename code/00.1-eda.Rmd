@@ -87,7 +87,7 @@ print(zone_section_summary)
 ```{r}
 
 # add a column for species richness (sum of all algae presence per row)
-data$richness <- rowSums(data[, 3:ncol(data)])
+#data$richness <- rowSums(data[, 3:ncol(data)])
 
 # summarize richness by section
 richness_summary <- data %>%
@@ -95,16 +95,28 @@ richness_summary <- data %>%
   summarise(averageRichness = mean(richness))
 
 # Create a bar plot for species richness
-richness<- ggplot(richness_summary, aes(x = factor(section), y = averageRichness)) +
-  geom_bar(stat = "identity", fill = "steelblue") +
+richness <- ggplot(richness_summary, aes(x = factor(section), y = averageRichness, fill = factor(section))) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = custom_colors) +  # Apply the custom color palette
   labs(
     title = "Species Richness by Section",
     x = "Section",
-    y = "Average Species Richness"
+    y = "Average Species Richness",
+    fill = "Section"  # Legend title
   ) +
-  theme_minimal()
+  theme_minimal(base_size = 14) +  # Clean theme with larger font size
+  theme(
+    panel.grid = element_blank(),             # Remove gridlines
+    panel.border = element_blank(),           # No border around the plot
+    axis.line = element_line(color = "black"),  # Retain X and Y axes
+    legend.position = "right"                 # Position the legend to the right
+  )
 
-#ggsave(filename= "/Users/cmantegna/Documents/GitHub/sicb_km/output/figures/algal_ricness.png", plot=richness, width = 12, height = 10, dpi = 300)
+# Display the plot
+print(richness)
+
+
+ggsave(filename= "/Users/cmantegna/Documents/GitHub/sicb_km/output/figures/algal_richness.png", plot=richness, width = 12, height = 10, dpi = 300)
 
 ```
 
@@ -265,13 +277,13 @@ custom_colors <- c(
   "6" = "#663000", "7" = "#996136", "8" = "#cc9b7a"  # Palette 3: Sections 6–8
 )
 
-#ff7f0e, #ffbb78
+
 # Plot NMDS with axes and custom colors
-ggplot() +
+algaeNMDS<- ggplot() +
   # Add convex hulls for each section
-  geom_polygon(data = hull_data, aes(x = NMDS1, y = NMDS2, fill = SECTION, group = SECTION), alpha = 0.3) +
+  geom_polygon(data = hull_data, aes(x = NMDS1, y = NMDS2, fill = section, group = section), alpha = 0.3) +
   # Add points for each sample
-  geom_point(data = nmds_scores, aes(x = NMDS1, y = NMDS2, color = SECTION), size = 3) +
+  geom_point(data = nmds_scores, aes(x = NMDS1, y = NMDS2, color = section), size = 3) +
   # Apply custom color palettes
   scale_fill_manual(values = custom_colors) +
   scale_color_manual(values = custom_colors) +
