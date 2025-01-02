@@ -116,9 +116,91 @@ richness <- ggplot(richness_summary, aes(x = factor(section), y = averageRichnes
 print(richness)
 
 
-ggsave(filename= "/Users/cmantegna/Documents/GitHub/sicb_km/output/figures/algal_richness.png", plot=richness, width = 12, height = 10, dpi = 300)
+#ggsave(filename= "/Users/cmantegna/Documents/GitHub/sicb_km/output/figures/algal_richness.png", plot=richness, width = 12, height = 10, dpi = 300)
 
 ```
+
+# Algal presence by section - cleaning up naming and plot colors
+```{r}
+
+library(tidyr)
+library(ggplot2)
+
+# rename algae from the mix of scientific and common names to their common names
+colnames(data)[3:16] <- c(
+  "Rockweed", "Sea Lettuce","Turfweed", "Sargassum", "Turkish Washcloth", "Turkish Towel", "Iridescent Seaweed", "Sugar Kelp", "Crustose Coralline Algae", "Tar Spot Algae", "Other Red Algae", "Other Green Algae", "Other Brown Algae", "Unknown Algae")
+
+# create a named vector mapping algae to their group
+algae_group <- c(
+  "Rockweed" = "Green Algae", "Sea Lettuce" = "Green Algae", "Other Green Algae" = "Green Algae",
+  "Turfweed" = "Brown Algae", "Sargassum" = "Brown Algae", "Turkish Washcloth" = "Brown Algae", 
+  "Sugar Kelp" = "Brown Algae", "Other Brown Algae" = "Brown Algae",
+  "Turkish Towel" = "Red Algae", "Iridescent Seaweed" = "Red Algae", 
+  "Crustose Coralline Algae" = "Red Algae", "Tar Spot Algae" = "Red Algae", "Other Red Algae" = "Red Algae",
+  "Unknown Algae" = "Black"
+)
+
+# Define individual colors for each algae
+algae_colors <- c(
+  "Rockweed" = "#24693D",    # Dark green base color
+  "Sea Lettuce" = "#3C8A55", 
+  "Other Green Algae" = "#5AAD7A",  # Lighter shades of green
+  "Turfweed" = "#663000", 
+  "Sargassum" = "#855740", 
+  "Turkish Washcloth" = "#996136", 
+  "Sugar Kelp" = "#B88C74", 
+  "Other Brown Algae" = "#D4B4A2", 
+  "Turkish Towel" = "#990000", 
+  "Iridescent Seaweed" = "#CC3333", 
+  "Crustose Coralline Algae" = "#E06666", 
+  "Tar Spot Algae" = "#F29999", 
+  "Other Red Algae" = "#F7CCCC", 
+  "Unknown Algae" = "#000000"  # Black
+)
+
+# Reshape data to long format
+algae_long <- data %>%
+  pivot_longer(cols = 3:16, names_to = "Algae", values_to = "Presence") %>%
+  filter(Presence > 0)  # Exclude algae with no presence
+
+# Reorder levels of the Algae factor
+algae_long$Algae <- factor(
+  algae_long$Algae,
+  levels = c(
+    "Unknown Algae",                           # Black
+    "Turkish Towel", "Iridescent Seaweed", 
+    "Crustose Coralline Algae", "Tar Spot Algae", "Other Red Algae",  # Red
+    "Turfweed", "Sargassum", "Turkish Washcloth", 
+    "Sugar Kelp", "Other Brown Algae",         # Brown
+    "Rockweed", "Sea Lettuce", "Other Green Algae"  # Green
+  )
+)
+
+# Create the stacked bar plot
+algaeColor_ordered<- ggplot(algae_long, aes(x = factor(section), y = Presence, fill = Algae)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = algae_colors) +  # Apply individual algae colors
+  labs(
+    title = "Algal Presence by Section",
+    x = "Section",
+    y = "Presence",
+    fill = "Algae Type"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    panel.grid = element_blank(),             # Remove gridlines
+    axis.line = element_line(color = "black"), # Retain X and Y axes
+    legend.position = "right",                # Position legend
+    legend.title = element_text(size = 12),   # Adjust legend title size
+    legend.text = element_text(size = 10)     # Adjust legend text size
+  )
+
+print(algaeColor_ordered)
+
+#ggsave(filename= "/Users/cmantegna/Documents/GitHub/sicb_km/output/figures/algae_by_type.png", plot=algaeColor_ordered, width = 12, height = 10, dpi = 300)
+
+```
+
 
 # Algal presence by section
 ```{r}
